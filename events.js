@@ -123,16 +123,15 @@ function send_events_and_subscribe({
     subscription.connection      = connection;
     subscription.filters         = filters;
     subscription.send = e => {
-        let match = false;
         for (let filter of subscription.filters) {
-            if (filter.test(e)) match = true;
-        }
-        if (match) {
-            subscription.connection.send(JSON.stringify([
-                'EVENT',
-                subscription.subscription_id,
-                e
-            ]));
+            if (filter.test(e)) {
+                subscription.connection.send(JSON.stringify([
+                    'EVENT',
+                    subscription.subscription_id,
+                    e
+                ]));
+                break;
+            }
         }
     };
 
