@@ -149,7 +149,9 @@ function handle(data) {
     try {
         message = JSON.parse(data.toString('utf8'));
     } catch (e) {
-        throw 'Invalid event format: (NIPS-01) JSON UTF-8 required'
+        console.log(e);
+        send_notice(this, new Error('Invalid event format: (NIPS-01) JSON UTF-8 required'));
+        return;
     }
     console.log('MESSAGE', message)
     try {
