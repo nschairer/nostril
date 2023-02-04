@@ -61,7 +61,7 @@ function parse_filter(filter) {
         since:   filter.since,
         until:   filter.until,
         limit:   filter.limit || 200,
-        test: e => {
+        test: function(e) {
             // Handle prefix matching for ids and authors
             // Conditions within filter treated as &&
             if (this.ids && this.ids.length) {
