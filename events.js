@@ -109,7 +109,7 @@ function parse_filter(filter) {
 }
 
 
-function get_events_and_subscribe({
+function send_events_and_subscribe({
     subscription_id, 
     filters,
     connection
@@ -162,7 +162,7 @@ function handle(data) {
                     break;
                 case 'REQ':
                     const filters = message.slice(2).map(f => parse_filter(f));
-                    const events  = get_events_and_subscribe({
+                    send_events_and_subscribe({
                         subscription_id: message[1], 
                         filters,
                         connection: this
