@@ -2,3 +2,4 @@ nostr-tools
 nips
 node_modules
 *.swp
+database-sqlite3.db

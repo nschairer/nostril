@@ -9,7 +9,7 @@ let event = {
     pubkey:     pk,
     created_at: Date.now(),
     kind:       1,
-    tags:       [],
+    tags:       [['e', 'asdfasdf']],
     content:    'This is  a nostr message',
 }
 event.id = getEventHash(event);
@@ -19,7 +19,7 @@ let req = {
     ids:     [],
     authors: [],
     kinds:   [],
-    '#e':    [],
+    '#e':    ['asdfasdf'],
     '#p':    [],
     since:   null,
     until:   null, 

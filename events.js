@@ -1,4 +1,4 @@
-
+const knex = require('./db');
 const subscriptions = {};
 const events        = [];
 
@@ -9,13 +9,34 @@ function send_notice(conn, error) {
     ]))
 }
 
-function save_event(event) {
-    events.push(event);
+function remove_subscription(subscription_id) {
+    delete subscriptions[subscription_id];
+}
+
+async function save_event(event) {
+    await knex('events')
+    .insert({...event, tags: JSON.stringify(event.tags)});
+    if (event.tags && event.tags.length) {
+        let cleantags = [];
+        for (let tag of event.tags) {
+            const [type, value] = tag;
+            cleantags.push({
+                id: event.id,
+                type,
+                value,
+                other: tag[2]
+            })
+        }
+        await knex('tags')
+        .insert(cleantags);
+    }
 }
 
 function publish_event(event) {
     for (let sub in subscriptions) {
-        subscriptions[sub].send(event)
+        if (subscriptions[sub].test(event)) {
+            subscriptions[sub].send_event(event)
+        }
     }
 }
 
@@ -28,7 +49,10 @@ function parse_event(event) {
     if (!event.pubkey.match(/^[a-f0-9]{64}$/)) throw 'Invalid pubkey format';
     if (!Array.isArray(event.tags))            throw 'tags must be an array';
     for (let tag of event.tags) {
-        if (typeof tag !== 'string') throw 'tags can only have strings';
+        if (!Array.isArray(tag)) throw 'tags must be subarrays of strings';
+        for (let prop of tag) {
+            if (typeof prop !== 'string') throw 'tags must be subarrays of strings';
+        }
     }
     return {
         id:         event.id,
@@ -62,8 +86,6 @@ function parse_filter(filter) {
         until:   filter.until,
         limit:   filter.limit || 200,
         test: function(e) {
-            // Handle prefix matching for ids and authors
-            // Conditions within filter treated as &&
             if (this.ids && this.ids.length) {
                 let found_id = false;
                 for (let id of this.ids) {
@@ -109,12 +131,11 @@ function parse_filter(filter) {
 }
 
 
-function send_events_and_subscribe({
+async function send_events_and_subscribe({
     subscription_id, 
     filters,
     connection
 }) {
-
     // Store subscription
     const subscription  = (subscriptions[subscription_id] = 
         subscriptions[subscription_id] || {}
@@ -122,28 +143,68 @@ function send_events_and_subscribe({
     subscription.subscription_id = subscription_id;
     subscription.connection      = connection;
     subscription.filters         = filters;
-    subscription.send = e => {
+    subscription.test            = e => subscription.filters.some(f => f.test(e));
+    subscription.send_event      = e => {
+        subscription.connection.send(JSON.stringify([
+            'EVENT',
+            subscription.subscription_id,
+            e
+        ]));
+    }
+    subscription.buildQuery = () => {
+        const q = knex('events');
+        let limit = Infinity;
+        let join  = false;
         for (let filter of subscription.filters) {
-            if (filter.test(e)) {
-                subscription.connection.send(JSON.stringify([
-                    'EVENT',
-                    subscription.subscription_id,
-                    e
-                ]));
-                break;
-            }
+            if (filter.limit < limit) limit = filter.limit;
+            let hasE = filter['#e'] && filter['#e'].length;
+            let hasP = filter['#p'] && filter['#p'].length;
+            join = join || hasE || hasP;
+            q.orWhere((qb) => {
+                if (filter.ids && filter.ids.length)         qb.whereIn('id', filter.ids);
+                if (filter.authors && filter.authors.length) qb.andWhereIn('pubkey', filter.authors);
+                if (filter.kinds && filter.kinds.length)     qb.andWhereIn('kind', filter.kinds);
+                if (filter.since)                            qb.andWhere('created_at', '<', filter.since);
+                if (filter.until)                            qb.andWhere('created_at', '>', filter.since);
+                if (hasE || hasP) {
+                    if (hasE) {
+                        let i = 0;
+                        let t = [];
+                        for (let prefix of filter['#e']) {
+                            t.push([`(tags.type = 'e' and tags.value like :e${i} || '%')`, i, prefix])
+                            i++;
+                        };
+                        qb.andWhereRaw(`
+                        (${t.map(e => e[0]).join(' OR ')})
+                    `, t.reduce((a,b) => { a['e' + b[1]] = b[2]; return a }, {}))
+                    }
+                    if (hasP) {
+                        let i = 0;
+                        let t = [];
+                        for (let prefix of filter['#p']) {
+                            t.push([`(tags.type = 'p' and tags.value like :p${i} || '%')`, i, prefix]);
+                            i++;
+                        };
+                        qb.andWhereRaw(`
+                        (${t.map(p => p[0]).join(' OR ')})
+                    `, t.reduce((a,b) => { a['p' + b[1]] = b[2]; return a }, {}))
+                    }
+                }
+            })
         }
-    };
+        if (join) {
+            q.leftJoin('tags', 'tags.id', 'events.id')
+            q.select(['events.*'])
+            q.groupBy(['events.id'])
+        }
+        q.limit(limit);
+        return q.stream();
+    }
 
-    for (let e of events) subscription.send(e);
+    for await (let event of subscription.buildQuery()) subscription.send_event({...event, tags: JSON.parse(event.tags)});
 }
 
-function remove_subscription(subscription_id) {
-    delete subscriptions[subscription_id];
-}
-
-
-function handle(data) {
+async function handle(data) {
     let message;
     try {
         message = JSON.parse(data.toString('utf8'));
@@ -158,12 +219,12 @@ function handle(data) {
             switch (message[0]) {
                 case 'EVENT':
                     const event = parse_event(message[1]);
-                    save_event(event);
+                    await save_event(event);
                     publish_event(event);
                     break;
                 case 'REQ':
                     const filters = message.slice(2).map(f => parse_filter(f));
-                    send_events_and_subscribe({
+                    await send_events_and_subscribe({
                         subscription_id: message[1], 
                         filters,
                         connection: this
