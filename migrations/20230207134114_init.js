@@ -18,15 +18,6 @@ exports.up = async function(knex) {
         );
 
     `)
-    .raw(`
-        CREATE TABLE tags (
-            id        text not null,
-            type      text not null,
-            value     text not null,
-            other     text,
-            FOREIGN KEY (id) REFERENCES events(id)
-        );
-    `)
   
 };
 

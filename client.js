@@ -9,7 +9,7 @@ let event = {
     pubkey:     pk,
     created_at: Date.now(),
     kind:       1,
-    tags:       [['e', 'asdfasdf']],
+    tags:       [['e', 'asdfasdf'], ['p', '71fb1767e455a7cf17ba203fafcd95c765e359bb6b140c3bd6f262055440509b']],
     content:    'This is  a nostr message',
 }
 event.id = getEventHash(event);
@@ -17,12 +17,12 @@ event.sig = signEvent(event, sk);
 
 let req = {
     ids:     [],
-    authors: [],
+    authors: ['51dc2e5e6c214bbd5b3'],
     kinds:   [],
-    '#e':    ['asdfasdf'],
-    '#p':    [],
-    since:   null,
-    until:   null, 
+    '#e':    [],
+    '#p':    ['71fb1767e455a7cf17ba203fafcd95c765e359bb6b140c3bd6f262055440509b'],
+    since:   1675831906825,
+    until:   null,
     limit:   10
 }
 

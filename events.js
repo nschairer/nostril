@@ -16,20 +16,6 @@ function remove_subscription(subscription_id) {
 async function save_event(event) {
     await knex('events')
     .insert({...event, tags: JSON.stringify(event.tags)});
-    if (event.tags && event.tags.length) {
-        let cleantags = [];
-        for (let tag of event.tags) {
-            const [type, value] = tag;
-            cleantags.push({
-                id: event.id,
-                type,
-                value,
-                other: tag[2]
-            })
-        }
-        await knex('tags')
-        .insert(cleantags);
-    }
 }
 
 function publish_event(event) {
@@ -94,11 +80,7 @@ function parse_filter(filter) {
                 if (!found_id) return false;
             }
             if (this.authors && this.authors.length) {
-                let found_author = false;
-                for (let author of this.authors) {
-                    if (e.pk.startsWith(author)) found_author = true;
-                }
-                if (!found_author) return false;
+                if (!this.authors.some(a => e.pubkey.startsWith(a))) return false;
             }
             if (this.kinds && this.kinds.length) {
                 if (!this.kinds.includes(e.kind)) return false;
@@ -114,7 +96,7 @@ function parse_filter(filter) {
             if (this['#p'] && this['#p'].lpngth) {
                 if (e.tags.length) {
                     const pmap = new Set(this['#p']);
-                    if (!e.tags.some(t => t[0] == 'p' && pmap[t[1]])) return false;
+                    if (!e.tags.some(t => t[0] == 'p' && pmap.has([t[1]]))) return false;
                 } else {
                     return false;
                 }
@@ -123,7 +105,7 @@ function parse_filter(filter) {
                 if (e.created_at < this.since) return false;
             }
             if (this.until) {
-                if (e.created_at > this.since) return false;
+                if (e.created_at > this.until) return false;
             }
             return true;
         }
@@ -154,50 +136,40 @@ async function send_events_and_subscribe({
     subscription.buildQuery = () => {
         const q = knex('events');
         let limit = Infinity;
-        let join  = false;
         for (let filter of subscription.filters) {
             if (filter.limit < limit) limit = filter.limit;
-            let hasE = filter['#e'] && filter['#e'].length;
-            let hasP = filter['#p'] && filter['#p'].length;
-            join = join || hasE || hasP;
             q.orWhere((qb) => {
-                if (filter.ids && filter.ids.length)         qb.whereIn('id', filter.ids);
-                if (filter.authors && filter.authors.length) qb.andWhereIn('pubkey', filter.authors);
-                if (filter.kinds && filter.kinds.length)     qb.andWhereIn('kind', filter.kinds);
-                if (filter.since)                            qb.andWhere('created_at', '<', filter.since);
-                if (filter.until)                            qb.andWhere('created_at', '>', filter.since);
-                if (hasE || hasP) {
-                    if (hasE) {
-                        let i = 0;
-                        let t = [];
-                        for (let prefix of filter['#e']) {
-                            t.push([`(tags.type = 'e' and tags.value like :e${i} || '%')`, i, prefix])
-                            i++;
-                        };
-                        qb.andWhereRaw(`
-                        (${t.map(e => e[0]).join(' OR ')})
-                    `, t.reduce((a,b) => { a['e' + b[1]] = b[2]; return a }, {}))
-                    }
-                    if (hasP) {
-                        let i = 0;
-                        let t = [];
-                        for (let prefix of filter['#p']) {
-                            t.push([`(tags.type = 'p' and tags.value like :p${i} || '%')`, i, prefix]);
-                            i++;
-                        };
-                        qb.andWhereRaw(`
-                        (${t.map(p => p[0]).join(' OR ')})
-                    `, t.reduce((a,b) => { a['p' + b[1]] = b[2]; return a }, {}))
-                    }
+                if (filter.kinds && filter.kinds.length)     qb.whereIn('kind', filter.kinds);
+                if (filter.since)                            qb.andWhere('created_at', '>', filter.since);
+                if (filter.until)                            qb.andWhere('created_at', '<', filter.until);
+                if (filter.ids && filter.ids.length) {
+                    qb.andWhere(qid => {
+                        for (let id of filter.ids) {
+                            qid.orWhereRaw(`id like :id || '%'`, {id});
+                        }
+                    })
+                }
+
+                if (filter.authors && filter.authors.length) {
+                    qb.andWhere(qauthor => {
+                        for (let author of filter.authors) {
+                            qauthor.orWhereRaw(`pubkey like :author || '%'`, {author});
+                        }
+                    })
+                }
+                if (filter['#e'] && filter['#e'].length) {
+                    const qs = '(' + filter['#e'].map(_ => '?').join(',') + ')';
+                    qb.andWhereRaw(`EXISTS (SELECT 1 FROM json_each(tags) WHERE json_extract(json_each.value, '$[0]') = 'e' and json_extract(json_each.value, '$[1]') in ${qs})`, filter['#e']);
+                }
+                if (filter['#p'] && filter['#p'].length) {
+                    const qs = '(' + filter['#p'].map(_ => '?').join(',') + ')';
+                    qb.andWhereRaw(`EXISTS (SELECT 1 FROM json_each(tags) WHERE json_extract(json_each.value, '$[0]') = 'p' and json_extract(json_each.value, '$[1]') in ${qs})`, filter['#p']);
                 }
             })
         }
-        if (join) {
-            q.leftJoin('tags', 'tags.id', 'events.id')
-            q.select(['events.*'])
-            q.groupBy(['events.id'])
-        }
         q.limit(limit);
+        q.select(['events.*'])
+        //console.log(q.toString())
         return q.stream();
     }
 
