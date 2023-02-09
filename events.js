@@ -212,6 +212,7 @@ async function handle(data) {
             throw 'Invalid event format: (NIPS-01) JSON array required'
         }
     } catch (e) {
+        console.log(e);
         send_notice(this, e);
     }
 }

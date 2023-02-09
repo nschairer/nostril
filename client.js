@@ -1,48 +1,57 @@
-const { WebSocket } = require('ws');
-const {generatePrivateKey, getPublicKey, getEventHash, signEvent} = require('nostr-tools')
+require('websocket-polyfill')
 
-const sk = generatePrivateKey();
-const pk = getPublicKey(sk);
+const {
+    relayInit,
+    generatePrivateKey,
+    getPublicKey,
+    getEventHash,
+    signEvent
+} = require('nostr-tools');
+const relay = relayInit('ws://localhost:8000')
+relay.on('connect', () => {
+    console.log(`connected to ${relay.url}`)
+})
+relay.on('error', () => {
+    console.log(`failed to connect to ${relay.url}`)
+})
 
+relay.connect()
+.then(() => {
+    let sk = generatePrivateKey()
+    let pk = getPublicKey(sk)
 
-let event = {
-    pubkey:     pk,
-    created_at: Date.now(),
-    kind:       1,
-    tags:       [['e', 'asdfasdf'], ['p', '71fb1767e455a7cf17ba203fafcd95c765e359bb6b140c3bd6f262055440509b']],
-    content:    'This is  a nostr message',
-}
-event.id = getEventHash(event);
-event.sig = signEvent(event, sk);
+    console.log("creating sub")
+    let sub = relay.sub([
+        {
+            kinds: [1],
+            authors: [pk]
+        }
+    ])
 
-let req = {
-    ids:     [],
-    authors: ['51dc2e5e6c214bbd5b3'],
-    kinds:   [],
-    '#e':    [],
-    '#p':    ['71fb1767e455a7cf17ba203fafcd95c765e359bb6b140c3bd6f262055440509b'],
-    since:   1675831906825,
-    until:   null,
-    limit:   10
-}
+    sub.on('event', event => {
+        console.log('got event:', event)
+    })
 
-const ws = new WebSocket('ws://localhost:8000');
+    let event = {
+        kind: 1,
+        pubkey: pk,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [],
+        content: 'hello world'
+    }
+    event.id = getEventHash(event)
+    event.sig = signEvent(event, sk)
 
-ws.on('error', console.error);
-
-ws.on('open', async function open() {
-    ws.send(JSON.stringify([
-        'REQ',
-        'fake_sub_id',
-        req
-    ]));
-    await new Promise(r => setTimeout(r, 1000))
-    ws.send(JSON.stringify([
-        'EVENT',
-        event
-    ]));
+    console.log("Publishing event")
+    let pub = relay.publish(event)
+    pub.on('ok', () => {
+        console.log(`${relay.url} has accepted our event`)
+    })
+    pub.on('seen', () => {
+        console.log(`we saw the event on ${relay.url}`)
+    })
+    pub.on('failed', reason => {
+        console.log(`failed to publish to ${relay.url}: ${reason}`)
+    })
 });
 
-ws.on('message', (data) => {
-    console.log(JSON.parse(data.toString('utf8')));
-})

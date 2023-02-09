@@ -1,7 +1,7 @@
 # nostril
 Simple nostr relay written in node.js 
 # NIPS
-* [ ] NIP-01: Basic protocol flow description
+* [x] NIP-01: Basic protocol flow description
 * [ ] NIP-02: Contact List and Petnames
 * [ ] NIP-03: OpenTimestamps Attestations for Events
 * [ ] NIP-04: Encrypted Direct Message
