@@ -13,9 +13,25 @@ function remove_subscription(subscription_id) {
     delete subscriptions[subscription_id];
 }
 
-async function save_event(event) {
-    await knex('events')
-    .insert({...event, tags: JSON.stringify(event.tags)});
+async function process_and_save_event(event) {
+    const txn = await knex.transaction();
+    try {
+        switch (event.kind) {
+            case 3:
+                await txn('events')
+                    .where({pubkey: event.pubkey, kind: 3})
+                    .del()
+            default:
+                break;
+        }
+
+        await txn('events').insert({...event, tags: JSON.stringify(event.tags)});
+        await txn.commit();
+    } catch (e) {
+        console.log(e);
+        await txn.rollback();
+        throw e;
+    }
 }
 
 function publish_event(event) {
@@ -191,7 +207,7 @@ async function handle(data) {
             switch (message[0]) {
                 case 'EVENT':
                     const event = parse_event(message[1]);
-                    await save_event(event);
+                    await process_and_save_event(event);
                     publish_event(event);
                     break;
                 case 'REQ':
