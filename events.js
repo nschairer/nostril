@@ -175,6 +175,12 @@ async function send_events_and_subscribe({
             e
         ]));
     }
+    subscription.send_eose = () => {
+        subscription.connection.send(JSON.stringify([
+            'EOSE',
+            subscription.subscription_id,
+        ]));
+    }
     subscription.buildQuery = () => {
         const q = knex('events');
         let limit = Infinity;
@@ -224,6 +230,7 @@ async function send_events_and_subscribe({
             tags: JSON.parse(event.tags)
         });
     }
+    subscription.send_eose();
 }
 
 async function handle(data) {
