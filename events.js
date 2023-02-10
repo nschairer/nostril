@@ -1,6 +1,9 @@
-const knex = require('./db');
+const secp256k1 = require('@noble/secp256k1');
+const knex      = require('./db');
+
 const subscriptions = {};
 const events        = [];
+
 
 function send_notice(conn, error) {
     conn.send(JSON.stringify([
@@ -42,7 +45,7 @@ function publish_event(event) {
     }
 }
 
-function parse_event(event) {
+async function parse_event(event) {
     if (typeof event.id !== 'string')          throw 'id must be a string';
     if (typeof event.sig !== 'string')         throw 'sig must be a string';
     if (typeof event.content !== 'string')     throw 'content must be a string';
@@ -58,6 +61,18 @@ function parse_event(event) {
     }
 
     if (event.ots && typeof event.ots !== 'string') throw 'Invalid ots data';
+
+    const id = await secp256k1.utils.sha256(Buffer.from(JSON.stringify([
+        0,
+        event.pubkey,
+        event.created_at,
+        event.kind,
+        event.tags,
+        event.content
+    ])))
+
+    if (Buffer.from(id).toString('hex') !== event.id)                         throw 'Invalid event id';
+    if (!(await secp256k1.schnorr.verify(event.sig, event.id, event.pubkey))) throw 'Invalid event signature';
 
     return {
         id:         event.id,
@@ -210,7 +225,7 @@ async function handle(data) {
         if (Array.isArray(message)) {
             switch (message[0]) {
                 case 'EVENT':
-                    const event = parse_event(message[1]);
+                    const event = await parse_event(message[1]);
                     await process_and_save_event(event);
                     publish_event(event);
                     break;
