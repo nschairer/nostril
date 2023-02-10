@@ -3,7 +3,7 @@ Simple nostr relay written in node.js
 # NIPS
 * [x] NIP-01: Basic protocol flow description
 * [x] NIP-02: Contact List and Petnames
-* [ ] NIP-03: OpenTimestamps Attestations for Events
+* [x] NIP-03: OpenTimestamps Attestations for Events
 * [ ] NIP-04: Encrypted Direct Message
 * [ ] NIP-05: Mapping Nostr keys to DNS-based internet identifiers
 * [ ] NIP-06: Basic key derivation from mnemonic seed phrase

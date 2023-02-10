@@ -56,6 +56,9 @@ function parse_event(event) {
             if (typeof prop !== 'string') throw 'tags must be subarrays of strings';
         }
     }
+
+    if (event.ots && typeof event.ots !== 'string') throw 'Invalid ots data';
+
     return {
         id:         event.id,
         pubkey:     event.pubkey,
@@ -63,7 +66,8 @@ function parse_event(event) {
         kind:       event.kind,
         tags:       event.tags,
         content:    event.content,
-        sig:        event.sig
+        sig:        event.sig,
+        ots:        event.ots
     }
 }
 
