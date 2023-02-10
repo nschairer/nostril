@@ -5,9 +5,6 @@ Simple nostr relay written in node.js
 * [x] NIP-02: Contact List and Petnames
 * [x] NIP-03: OpenTimestamps Attestations for Events
 * [x] NIP-04: Encrypted Direct Message
-* [x] NIP-05: Mapping Nostr keys to DNS-based internet identifiers
-* [ ] NIP-06: Basic key derivation from mnemonic seed phrase
-* [ ] NIP-07: window.nostr capability for web browsers
 * [ ] NIP-08: Handling Mentions
 * [ ] NIP-09: Event Deletion
 * [ ] NIP-10: Conventions for clients' use of e and p tags in text events.
