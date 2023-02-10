@@ -24,6 +24,13 @@ async function process_and_save_event(event) {
                 await txn('events')
                     .where({pubkey: event.pubkey, kind: 3})
                     .del()
+                break;
+            case 4:
+                if (!event.tags.find(t => t[0] == 'p' && t[1].match(/^[a-f0-9]{64}$/))) {
+                    throw 'Recipient pubkey must be present in event tags'
+                }
+                if (!event.content.match(/.+\?iv=.+/)) throw 'base64-encoded, aes-256-cbc encrypted string ending with iv required'
+                break;
             default:
                 break;
         }
@@ -82,7 +89,7 @@ async function parse_event(event) {
         tags:       event.tags,
         content:    event.content,
         sig:        event.sig,
-        ots:        event.ots
+        ...(event.ots && {ots: event.ots})
     }
 }
 
@@ -208,7 +215,15 @@ async function send_events_and_subscribe({
         return q.stream();
     }
 
-    for await (let event of subscription.buildQuery()) subscription.send_event({...event, tags: JSON.parse(event.tags)});
+    for await (let event of subscription.buildQuery()) {
+        if (event.ots == null) {
+            delete event.ots;
+        }
+        subscription.send_event({
+            ...event,
+            tags: JSON.parse(event.tags)
+        });
+    }
 }
 
 async function handle(data) {
